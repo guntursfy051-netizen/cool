@@ -1,0 +1,187 @@
+-- SETTINGS
+_G.offset = Vector3.new(0, 0, 5)
+getgenv().auto = false
+getgenv().bossMode = "Metro"
+
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+
+local bv
+local loopRunning = false
+
+-- Anti Knockback
+local function addAntiKnockback(hrp)
+    if bv then bv:Destroy() end
+    
+    bv = Instance.new("BodyVelocity")
+    bv.Name = "AntiKnockback"
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.zero
+    bv.P = 125000
+    bv.Parent = hrp
+end
+
+-- Get Target Boss
+local function getTargetBoss()
+    local map = workspace:FindFirstChild("Map")
+    if not map then return nil end
+    
+    local bossFolder = map:FindFirstChild("Boss")
+    if not bossFolder then return nil end
+    
+    local area = bossFolder:FindFirstChild(getgenv().bossMode)
+    if not area then return nil end
+    
+    local bosses = area:FindFirstChild("Bosses")
+    if not bosses then return nil end
+    
+    for _, boss in pairs(bosses:GetChildren()) do
+        if boss:IsA("Model") 
+        and boss:FindFirstChild("HumanoidRootPart") 
+        and boss:FindFirstChild("Humanoid") 
+        and boss.Humanoid.Health > 0 then
+            return boss
+        end
+    end
+    
+    return nil
+end
+
+----------------------------------------------------------------
+-- AUTO SKILL (REAL REMOTE VERSION)
+----------------------------------------------------------------
+local SkillsRemote = game:GetService("ReplicatedStorage")
+    :WaitForChild("Assets")
+    :WaitForChild("Remotes")
+    :WaitForChild("Skills")
+    :WaitForChild("SKill")
+
+local function useSkills()
+
+    local skillList = {
+        {"Training Strike","Training Strike","InnateTechnique"},
+        {"Anti-Magic Greatsword","Anti-Magic Cleave","Sword"},
+        {"Choso","Blood Shot"},
+        {"Choso","Blood Ascension"},
+        {"Choso","Piercing Blood"},
+        {"Choso","Hemorrhage"}
+    }
+
+    for _, args in ipairs(skillList) do
+        SkillsRemote:FireServer(unpack(args))
+        task.wait(0.3) -- small delay between skills
+    end
+end
+
+-- Main Loop
+local function startLoop()
+    if loopRunning then return end
+    loopRunning = true
+
+    task.spawn(function()
+        while getgenv().auto do
+            task.wait(0.1)
+            pcall(function()
+                local char = player.Character
+                if not char then return end
+                
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                
+                if not hrp:FindFirstChild("AntiKnockback") then
+                    addAntiKnockback(hrp)
+                end
+                
+                local target = getTargetBoss()
+                if target then
+                    local targetHRP = target.HumanoidRootPart
+                    local targetPos = targetHRP.Position + _G.offset
+                    
+                    hrp.CFrame = CFrame.lookAt(targetPos, targetHRP.Position)
+                    bv.Velocity = Vector3.zero
+                    
+                    -- AUTO SKILLS
+                    useSkills()
+                end
+            end)
+        end
+        
+        if bv then
+            bv:Destroy()
+        end
+        
+        loopRunning = false
+    end)
+end
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Parent = ScreenGui
+Frame.Size = UDim2.new(0, 240, 0, 180)
+Frame.Position = UDim2.new(0.4, 0, 0.4, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Frame.Active = true
+Frame.Draggable = true
+
+local Title = Instance.new("TextLabel")
+Title.Parent = Frame
+Title.Size = UDim2.new(1,0,0,30)
+Title.BackgroundTransparency = 1
+Title.Text = "Boss Lock + Auto Skill"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.TextScaled = true
+
+-- Toggle
+local Toggle = Instance.new("TextButton")
+Toggle.Parent = Frame
+Toggle.Size = UDim2.new(0.8,0,0,40)
+Toggle.Position = UDim2.new(0.1,0,0.3,0)
+Toggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+Toggle.TextColor3 = Color3.new(1,1,1)
+Toggle.TextScaled = true
+Toggle.Text = "OFF"
+
+Toggle.MouseButton1Click:Connect(function()
+    getgenv().auto = not getgenv().auto
+    
+    if getgenv().auto then
+        Toggle.Text = "ON"
+        Toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
+        startLoop()
+    else
+        Toggle.Text = "OFF"
+        Toggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    end
+end)
+
+-- Metro Button
+local MetroBtn = Instance.new("TextButton")
+MetroBtn.Parent = Frame
+MetroBtn.Size = UDim2.new(0.35,0,0,35)
+MetroBtn.Position = UDim2.new(0.1,0,0.7,0)
+MetroBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+MetroBtn.TextColor3 = Color3.new(1,1,1)
+MetroBtn.TextScaled = true
+MetroBtn.Text = "Metro Boss"
+
+MetroBtn.MouseButton1Click:Connect(function()
+    getgenv().bossMode = "Metro"
+end)
+
+-- Lac Button
+local LacBtn = Instance.new("TextButton")
+LacBtn.Parent = Frame
+LacBtn.Size = UDim2.new(0.35,0,0,35)
+LacBtn.Position = UDim2.new(0.55,0,0.7,0)
+LacBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+LacBtn.TextColor3 = Color3.new(1,1,1)
+LacBtn.TextScaled = true
+LacBtn.Text = "Lac Boss"
+
+LacBtn.MouseButton1Click:Connect(function()
+    getgenv().bossMode = "Lac"
+end)
