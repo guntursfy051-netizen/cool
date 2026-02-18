@@ -8,7 +8,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 _G.dis = CFrame.new(0,0,5)   -- Offset from boss
 local skillCooldown = 1       -- Seconds between skill casts
 
---// Character handling (updates after respawn)
+--// Character handling
 local hrp
 local function updateCharacter(char)
     hrp = char:WaitForChild("HumanoidRootPart")
@@ -16,7 +16,7 @@ end
 updateCharacter(player.Character or player.CharacterAdded:Wait())
 player.CharacterAdded:Connect(updateCharacter)
 
---// Anti-ragdoll setup
+--// Anti-ragdoll
 local function antiRagdoll()
     local char = player.Character
     if not char then return end
@@ -35,15 +35,15 @@ end
 local SkillsRemote = ReplicatedStorage:WaitForChild("Assets")
     :WaitForChild("Remotes"):WaitForChild("Skills"):WaitForChild("SKill")
 
---// Function to use skills
+--// Use skills
 local function useSkills()
     local skillList = {
         {"Training Strike","Training Strike","InnateTechnique"},
         {"Anti-Magic Greatsword","Anti-Magic Cleave","Sword"},
-        {"Choso","Blood Shot"},
-        {"Choso","Blood Ascension"},
-        {"Choso","Piercing Blood"},
-        {"Choso","Hemorrhage"}
+        {"Toji","Brutal Strike"}, 
+        {"Toji","Groundbreaker Punch"}, 
+        {"Toji","Savage Kick Barrage"}, 
+        {"Toji","Forward Devastation"}
     }
 
     for _, args in ipairs(skillList) do
@@ -52,15 +52,13 @@ local function useSkills()
     end
 end
 
---// Function to teleport & face boss, returns true if teleport occurred
+--// Teleport & face boss
 local function handleBosses(bossFolder)
     for _, boss in pairs(bossFolder:GetChildren()) do
         local bossHRP = boss:FindFirstChild("HumanoidRootPart")
         local bossHumanoid = boss:FindFirstChildOfClass("Humanoid")
         if bossHRP and bossHumanoid and bossHumanoid.Health > 0 then
-            -- Teleport
             hrp.CFrame = bossHRP.CFrame * _G.dis
-            -- Face boss
             local direction = (bossHRP.Position - hrp.Position).Unit
             hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + direction)
             return true
@@ -69,8 +67,14 @@ local function handleBosses(bossFolder)
     return false
 end
 
---// Main auto loop for a map
-local function autoBossMap(bossMap)
+--// Toggle state
+getgenv().auto = false
+
+--// Maps for All Bosses button (Metro + Lac)
+local allMaps = {"Metro", "Lac"}
+
+--// Smart Auto Farm: Metro + Lac
+local function smartAutoFarm()
     getgenv().auto = true
     local lastSkillTime = 0
 
@@ -79,35 +83,57 @@ local function autoBossMap(bossMap)
         antiRagdoll()
         local bossFound = false
 
-        local bossesFolder = workspace:WaitForChild("Map")
-            :WaitForChild("Boss"):WaitForChild(bossMap):WaitForChild("Bosses")
+        for _, mapName in ipairs(allMaps) do
+            local bossesFolder = workspace:WaitForChild("Map")
+                :WaitForChild("Boss"):WaitForChild(mapName):WaitForChild("Bosses")
 
-        local teleported = handleBosses(bossesFolder)
-        if teleported then
-            bossFound = true
-            -- Only use skills if teleported and cooldown passed
-            if tick() - lastSkillTime >= skillCooldown then
-                useSkills()
-                lastSkillTime = tick()
+            if handleBosses(bossesFolder) then
+                bossFound = true
+                if tick() - lastSkillTime >= skillCooldown then
+                    useSkills()
+                    lastSkillTime = tick()
+                end
+                break -- stop checking other maps once a boss is found
             end
         end
 
         if not bossFound then
-            getgenv().auto = false
-            warn("No active bosses found in "..bossMap..". Auto stopped.")
+            task.wait(1) -- wait a bit and retry
         end
     end
 end
 
---// GUI Creation
+--// Auto Farm WorldBoss
+local function autoWorldBoss()
+    getgenv().auto = true
+    local lastSkillTime = 0
+
+    while getgenv().auto do
+        task.wait(0.1)
+        antiRagdoll()
+
+        local bossesFolder = workspace:WaitForChild("Map")
+            :WaitForChild("Boss"):WaitForChild("WorldBoss"):WaitForChild("Bosses")
+
+        if handleBosses(bossesFolder) then
+            if tick() - lastSkillTime >= skillCooldown then
+                useSkills()
+                lastSkillTime = tick()
+            end
+        else
+            task.wait(1)
+        end
+    end
+end
+
+--// GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BossAutoGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
---// Main Frame
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 200)
+mainFrame.Size = UDim2.new(0, 200, 0, 220)
 mainFrame.Position = UDim2.new(0,50,0,50)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 mainFrame.BorderSizePixel = 0
@@ -115,7 +141,6 @@ mainFrame.Parent = screenGui
 mainFrame.Active = true
 mainFrame.Draggable = true
 
---// Title
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1,0,0,30)
 title.Position = UDim2.new(0,0,0,0)
@@ -126,39 +151,62 @@ title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 title.Parent = mainFrame
 
---// Metro Button
-local metroButton = Instance.new("TextButton")
-metroButton.Size = UDim2.new(0,150,0,40)
-metroButton.Position = UDim2.new(0,25,0,50)
-metroButton.Text = "Auto Metro Boss"
-metroButton.BackgroundColor3 = Color3.fromRGB(0,170,255)
-metroButton.TextColor3 = Color3.fromRGB(255,255,255)
-metroButton.Parent = mainFrame
-metroButton.MouseButton1Click:Connect(function()
-    spawn(function() autoBossMap("Metro") end)
+--// Auto Farm All Bosses Button (Metro + Lac)
+local allBossesButton = Instance.new("TextButton")
+allBossesButton.Size = UDim2.new(0,150,0,50)
+allBossesButton.Position = UDim2.new(0,25,0,50)
+allBossesButton.Text = "Auto Farm All Bosses (OFF)"
+allBossesButton.BackgroundColor3 = Color3.fromRGB(0,170,255)
+allBossesButton.TextColor3 = Color3.fromRGB(255,255,255)
+allBossesButton.Parent = mainFrame
+
+allBossesButton.MouseButton1Click:Connect(function()
+    if getgenv().auto then
+        getgenv().auto = false
+        allBossesButton.Text = "Auto Farm All Bosses (OFF)"
+        allBossesButton.BackgroundColor3 = Color3.fromRGB(0,170,255)
+    else
+        allBossesButton.Text = "Auto Farm All Bosses (ON)"
+        allBossesButton.BackgroundColor3 = Color3.fromRGB(0,255,0)
+        spawn(smartAutoFarm)
+    end
 end)
 
---// Lac Button
-local lacButton = Instance.new("TextButton")
-lacButton.Size = UDim2.new(0,150,0,40)
-lacButton.Position = UDim2.new(0,25,0,100)
-lacButton.Text = "Auto Lac Boss"
-lacButton.BackgroundColor3 = Color3.fromRGB(0,255,128)
-lacButton.TextColor3 = Color3.fromRGB(0,0,0)
-lacButton.Parent = mainFrame
-lacButton.MouseButton1Click:Connect(function()
-    spawn(function() autoBossMap("Lac") end)
+--// Auto Farm WorldBoss Button
+local worldButton = Instance.new("TextButton")
+worldButton.Size = UDim2.new(0,150,0,50)
+worldButton.Position = UDim2.new(0,25,0,110)
+worldButton.Text = "Auto World Boss (OFF)"
+worldButton.BackgroundColor3 = Color3.fromRGB(255,170,0)
+worldButton.TextColor3 = Color3.fromRGB(0,0,0)
+worldButton.Parent = mainFrame
+
+worldButton.MouseButton1Click:Connect(function()
+    if getgenv().auto then
+        getgenv().auto = false
+        worldButton.Text = "Auto World Boss (OFF)"
+        worldButton.BackgroundColor3 = Color3.fromRGB(255,170,0)
+    else
+        worldButton.Text = "Auto World Boss (ON)"
+        worldButton.BackgroundColor3 = Color3.fromRGB(0,255,0)
+        spawn(autoWorldBoss)
+    end
 end)
 
---// Stop Button
+--// STOP Button
 local stopButton = Instance.new("TextButton")
-stopButton.Size = UDim2.new(0,150,0,40)
-stopButton.Position = UDim2.new(0,25,0,150)
+stopButton.Size = UDim2.new(0,150,0,50)
+stopButton.Position = UDim2.new(0,25,0,170)
 stopButton.Text = "STOP Auto"
 stopButton.BackgroundColor3 = Color3.fromRGB(255,50,50)
 stopButton.TextColor3 = Color3.fromRGB(255,255,255)
 stopButton.Parent = mainFrame
+
 stopButton.MouseButton1Click:Connect(function()
     getgenv().auto = false
+    allBossesButton.Text = "Auto Farm All Bosses (OFF)"
+    allBossesButton.BackgroundColor3 = Color3.fromRGB(0,170,255)
+    worldButton.Text = "Auto World Boss (OFF)"
+    worldButton.BackgroundColor3 = Color3.fromRGB(255,170,0)
     warn("Auto farm stopped manually.")
 end)
