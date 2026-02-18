@@ -96,10 +96,12 @@ local function startLoop()
                 local target = getTargetBoss()
                 if target then
                     local targetHRP = target.HumanoidRootPart
-                    local targetPos = targetHRP.Position + _G.offset
-                    
-                    hrp.CFrame = CFrame.lookAt(targetPos, targetHRP.Position)
-                    bv.Velocity = Vector3.zero
+                    local desiredPos = targetHRP.Position + _G.offset
+hrp.Position = desiredPos
+
+-- Lock rotation every frame
+hrp.CFrame = CFrame.lookAt(hrp.Position, targetHRP.Position)
+
                     
                     -- AUTO SKILLS
                     useSkills()
