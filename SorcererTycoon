@@ -1,64 +1,42 @@
--- SETTINGS
-_G.offset = Vector3.new(0, 0, 5)
-getgenv().auto = false
-getgenv().bossMode = "Metro"
-
+--// Services
 local Players = game:GetService("Players")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
-local bv
-local loopRunning = false
+--// Settings
+_G.dis = CFrame.new(0,0,5)   -- Offset from boss
+local skillCooldown = 1       -- Seconds between skill casts
 
--- Anti Knockback
-local function addAntiKnockback(hrp)
-    if bv then bv:Destroy() end
-    
-    bv = Instance.new("BodyVelocity")
-    bv.Name = "AntiKnockback"
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.zero
-    bv.P = 125000
-    bv.Parent = hrp
+--// Character handling (updates after respawn)
+local hrp
+local function updateCharacter(char)
+    hrp = char:WaitForChild("HumanoidRootPart")
 end
+updateCharacter(player.Character or player.CharacterAdded:Wait())
+player.CharacterAdded:Connect(updateCharacter)
 
--- Get Target Boss
-local function getTargetBoss()
-    local map = workspace:FindFirstChild("Map")
-    if not map then return nil end
-    
-    local bossFolder = map:FindFirstChild("Boss")
-    if not bossFolder then return nil end
-    
-    local area = bossFolder:FindFirstChild(getgenv().bossMode)
-    if not area then return nil end
-    
-    local bosses = area:FindFirstChild("Bosses")
-    if not bosses then return nil end
-    
-    for _, boss in pairs(bosses:GetChildren()) do
-        if boss:IsA("Model") 
-        and boss:FindFirstChild("HumanoidRootPart") 
-        and boss:FindFirstChild("Humanoid") 
-        and boss.Humanoid.Health > 0 then
-            return boss
+--// Anti-ragdoll setup
+local function antiRagdoll()
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = false
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("BodyVelocity") then
+                v:Destroy()
+            end
         end
     end
-    
-    return nil
 end
 
-----------------------------------------------------------------
--- AUTO SKILL (REAL REMOTE VERSION)
-----------------------------------------------------------------
-local SkillsRemote = game:GetService("ReplicatedStorage")
-    :WaitForChild("Assets")
-    :WaitForChild("Remotes")
-    :WaitForChild("Skills")
-    :WaitForChild("SKill")
+--// Skills Remote
+local SkillsRemote = ReplicatedStorage:WaitForChild("Assets")
+    :WaitForChild("Remotes"):WaitForChild("Skills"):WaitForChild("SKill")
 
+--// Function to use skills
 local function useSkills()
-
     local skillList = {
         {"Training Strike","Training Strike","InnateTechnique"},
         {"Anti-Magic Greatsword","Anti-Magic Cleave","Sword"},
@@ -70,120 +48,117 @@ local function useSkills()
 
     for _, args in ipairs(skillList) do
         SkillsRemote:FireServer(unpack(args))
-        task.wait(0.3) -- small delay between skills
+        task.wait(0.3)
     end
 end
 
--- Main Loop
-local function startLoop()
-    if loopRunning then return end
-    loopRunning = true
-
-    task.spawn(function()
-        while getgenv().auto do
-            task.wait(0.1)
-            pcall(function()
-                local char = player.Character
-                if not char then return end
-                
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-                
-                if not hrp:FindFirstChild("AntiKnockback") then
-                    addAntiKnockback(hrp)
-                end
-                
-                local target = getTargetBoss()
-                if target then
-                    local targetHRP = target.HumanoidRootPart
-                    local desiredPos = targetHRP.Position + _G.offset
-hrp.Position = desiredPos
-
--- Lock rotation every frame
-hrp.CFrame = CFrame.lookAt(hrp.Position, targetHRP.Position)
-
-                    
-                    -- AUTO SKILLS
-                    useSkills()
-                end
-            end)
+--// Function to teleport & face boss, returns true if teleport occurred
+local function handleBosses(bossFolder)
+    for _, boss in pairs(bossFolder:GetChildren()) do
+        local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+        local bossHumanoid = boss:FindFirstChildOfClass("Humanoid")
+        if bossHRP and bossHumanoid and bossHumanoid.Health > 0 then
+            -- Teleport
+            hrp.CFrame = bossHRP.CFrame * _G.dis
+            -- Face boss
+            local direction = (bossHRP.Position - hrp.Position).Unit
+            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + direction)
+            return true
         end
-        
-        if bv then
-            bv:Destroy()
-        end
-        
-        loopRunning = false
-    end)
+    end
+    return false
 end
 
--- GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = game.CoreGui
+--// Main auto loop for a map
+local function autoBossMap(bossMap)
+    getgenv().auto = true
+    local lastSkillTime = 0
 
-local Frame = Instance.new("Frame")
-Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 240, 0, 180)
-Frame.Position = UDim2.new(0.4, 0, 0.4, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Frame.Active = true
-Frame.Draggable = true
+    while getgenv().auto do
+        task.wait(0.1)
+        antiRagdoll()
+        local bossFound = false
 
-local Title = Instance.new("TextLabel")
-Title.Parent = Frame
-Title.Size = UDim2.new(1,0,0,30)
-Title.BackgroundTransparency = 1
-Title.Text = "Boss Lock + Auto Skill"
-Title.TextColor3 = Color3.new(1,1,1)
-Title.TextScaled = true
+        local bossesFolder = workspace:WaitForChild("Map")
+            :WaitForChild("Boss"):WaitForChild(bossMap):WaitForChild("Bosses")
 
--- Toggle
-local Toggle = Instance.new("TextButton")
-Toggle.Parent = Frame
-Toggle.Size = UDim2.new(0.8,0,0,40)
-Toggle.Position = UDim2.new(0.1,0,0.3,0)
-Toggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
-Toggle.TextColor3 = Color3.new(1,1,1)
-Toggle.TextScaled = true
-Toggle.Text = "OFF"
+        local teleported = handleBosses(bossesFolder)
+        if teleported then
+            bossFound = true
+            -- Only use skills if teleported and cooldown passed
+            if tick() - lastSkillTime >= skillCooldown then
+                useSkills()
+                lastSkillTime = tick()
+            end
+        end
 
-Toggle.MouseButton1Click:Connect(function()
-    getgenv().auto = not getgenv().auto
-    
-    if getgenv().auto then
-        Toggle.Text = "ON"
-        Toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
-        startLoop()
-    else
-        Toggle.Text = "OFF"
-        Toggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        if not bossFound then
+            getgenv().auto = false
+            warn("No active bosses found in "..bossMap..". Auto stopped.")
+        end
     end
+end
+
+--// GUI Creation
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "BossAutoGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+--// Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 200)
+mainFrame.Position = UDim2.new(0,50,0,50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+--// Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,30)
+title.Position = UDim2.new(0,0,0,0)
+title.BackgroundColor3 = Color3.fromRGB(50,50,50)
+title.Text = "Boss Auto Farm"
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+title.Parent = mainFrame
+
+--// Metro Button
+local metroButton = Instance.new("TextButton")
+metroButton.Size = UDim2.new(0,150,0,40)
+metroButton.Position = UDim2.new(0,25,0,50)
+metroButton.Text = "Auto Metro Boss"
+metroButton.BackgroundColor3 = Color3.fromRGB(0,170,255)
+metroButton.TextColor3 = Color3.fromRGB(255,255,255)
+metroButton.Parent = mainFrame
+metroButton.MouseButton1Click:Connect(function()
+    spawn(function() autoBossMap("Metro") end)
 end)
 
--- Metro Button
-local MetroBtn = Instance.new("TextButton")
-MetroBtn.Parent = Frame
-MetroBtn.Size = UDim2.new(0.35,0,0,35)
-MetroBtn.Position = UDim2.new(0.1,0,0.7,0)
-MetroBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-MetroBtn.TextColor3 = Color3.new(1,1,1)
-MetroBtn.TextScaled = true
-MetroBtn.Text = "Metro Boss"
-
-MetroBtn.MouseButton1Click:Connect(function()
-    getgenv().bossMode = "Metro"
+--// Lac Button
+local lacButton = Instance.new("TextButton")
+lacButton.Size = UDim2.new(0,150,0,40)
+lacButton.Position = UDim2.new(0,25,0,100)
+lacButton.Text = "Auto Lac Boss"
+lacButton.BackgroundColor3 = Color3.fromRGB(0,255,128)
+lacButton.TextColor3 = Color3.fromRGB(0,0,0)
+lacButton.Parent = mainFrame
+lacButton.MouseButton1Click:Connect(function()
+    spawn(function() autoBossMap("Lac") end)
 end)
 
--- Lac Button
-local LacBtn = Instance.new("TextButton")
-LacBtn.Parent = Frame
-LacBtn.Size = UDim2.new(0.35,0,0,35)
-LacBtn.Position = UDim2.new(0.55,0,0.7,0)
-LacBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-LacBtn.TextColor3 = Color3.new(1,1,1)
-LacBtn.TextScaled = true
-LacBtn.Text = "Lac Boss"
-
-LacBtn.MouseButton1Click:Connect(function()
-    getgenv().bossMode = "Lac"
+--// Stop Button
+local stopButton = Instance.new("TextButton")
+stopButton.Size = UDim2.new(0,150,0,40)
+stopButton.Position = UDim2.new(0,25,0,150)
+stopButton.Text = "STOP Auto"
+stopButton.BackgroundColor3 = Color3.fromRGB(255,50,50)
+stopButton.TextColor3 = Color3.fromRGB(255,255,255)
+stopButton.Parent = mainFrame
+stopButton.MouseButton1Click:Connect(function()
+    getgenv().auto = false
+    warn("Auto farm stopped manually.")
 end)
