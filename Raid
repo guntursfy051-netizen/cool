@@ -2,7 +2,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local VIM = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -18,9 +17,8 @@ player.CharacterAdded:Connect(SetupCharacter)
 
 --// SETTINGS
 local FARM = false
-local BRING = false
-local SKILL = false
 local HITBOX = 6
+local DIST = 4
 
 -------------------------------------------------
 -- GUI
@@ -30,15 +28,15 @@ gui.Parent = PlayerGui
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0,240,0,220)
-frame.Position = UDim2.new(0,40,0.5,-100)
+frame.Size = UDim2.new(0,240,0,230)
+frame.Position = UDim2.new(0,40,0.5,-115)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
 frame.Draggable = true
 
 local function MakeButton(text, y)
 	local b = Instance.new("TextButton", frame)
-	b.Size = UDim2.new(1,-10,0,34)
+	b.Size = UDim2.new(1,-10,0,40)
 	b.Position = UDim2.new(0,5,0,y)
 	b.BackgroundColor3 = Color3.fromRGB(40,40,40)
 	b.TextColor3 = Color3.new(1,1,1)
@@ -46,90 +44,64 @@ local function MakeButton(text, y)
 	return b
 end
 
-local farmBtn = MakeButton("Auto Farm : OFF",5)
-local bringBtn = MakeButton("Bring Boss : OFF",45)
-local skillBtn = MakeButton("Auto Skill : OFF",85)
-
+local farmBtn = MakeButton("Auto Farm + Freeze : OFF",5)
 farmBtn.MouseButton1Click:Connect(function()
 	FARM = not FARM
-	farmBtn.Text = FARM and "Auto Farm : ON" or "Auto Farm : OFF"
-end)
-
-bringBtn.MouseButton1Click:Connect(function()
-	BRING = not BRING
-	bringBtn.Text = BRING and "Bring Boss : ON" or "Bring Boss : OFF"
-end)
-
-skillBtn.MouseButton1Click:Connect(function()
-	SKILL = not SKILL
-	skillBtn.Text = SKILL and "Auto Skill : ON" or "Auto Skill : OFF"
+	farmBtn.Text = FARM and "Auto Farm + Freeze : ON" or "Auto Farm + Freeze : OFF"
 end)
 
 -------------------------------------------------
 -- HITBOX SLIDER
 -------------------------------------------------
-local bar = Instance.new("Frame", frame)
-bar.Size = UDim2.new(1,-20,0,10)
-bar.Position = UDim2.new(0,10,0,140)
-bar.BackgroundColor3 = Color3.fromRGB(70,70,70)
+local function CreateSlider(y, label, min, max, default, callback)
+	local bar = Instance.new("Frame", frame)
+	bar.Size = UDim2.new(1,-20,0,10)
+	bar.Position = UDim2.new(0,10,0,y)
+	bar.BackgroundColor3 = Color3.fromRGB(70,70,70)
 
-local fill = Instance.new("Frame", bar)
-fill.BackgroundColor3 = Color3.fromRGB(0,170,255)
-fill.Size = UDim2.new(0.15,0,1,0)
+	local fill = Instance.new("Frame", bar)
+	fill.BackgroundColor3 = Color3.fromRGB(0,170,255)
 
-local txt = Instance.new("TextLabel", frame)
-txt.Size = UDim2.new(1,0,0,20)
-txt.Position = UDim2.new(0,0,0,155)
-txt.BackgroundTransparency = 1
-txt.TextColor3 = Color3.new(1,1,1)
-txt.Text = "Hitbox : 6"
+	local txt = Instance.new("TextLabel", frame)
+	txt.Size = UDim2.new(1,0,0,20)
+	txt.Position = UDim2.new(0,0,0,y+15)
+	txt.BackgroundTransparency = 1
+	txt.TextColor3 = Color3.new(1,1,1)
 
-local sliding = false
+	local sliding = false
 
-bar.InputBegan:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 then
-		sliding = true
-	end
-end)
-
-UIS.InputEnded:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 then
-		sliding = false
-	end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if sliding then
-		local mouse = UIS:GetMouseLocation()
-		local pct = math.clamp((mouse.X - bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
+	local function set(pct)
 		fill.Size = UDim2.new(pct,0,1,0)
-		HITBOX = math.floor(4 + pct*26)
-		txt.Text = "Hitbox : "..HITBOX
+		local val = math.floor(min + pct*(max-min))
+		txt.Text = label.." : "..val
+		callback(val)
 	end
-end)
 
--------------------------------------------------
--- AUTO SKILL LOOP
--------------------------------------------------
-task.spawn(function()
-	local keys = {
-		Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three,
-		Enum.KeyCode.Four, Enum.KeyCode.Five, Enum.KeyCode.Six,
-		Enum.KeyCode.Seven
-	}
+	set((default-min)/(max-min))
 
-	while true do
-		if SKILL and FARM then
-			for _,k in ipairs(keys) do
-				VIM:SendKeyEvent(true,k,false,game)
-				task.wait()
-				VIM:SendKeyEvent(false,k,false,game)
-				task.wait(0.25)
-			end
+	bar.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			sliding = true
 		end
-		task.wait(0.1)
-	end
-end)
+	end)
+
+	UIS.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			sliding = false
+		end
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if sliding then
+			local mouse = UIS:GetMouseLocation()
+			local pct = math.clamp((mouse.X - bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
+			set(pct)
+		end
+	end)
+end
+
+CreateSlider(60,"Hitbox",4,30,6,function(v) HITBOX = v end)
+CreateSlider(120,"Farm Distance",2,12,4,function(v) DIST = v end)
 
 -------------------------------------------------
 -- BOSS FOLDER
@@ -147,21 +119,16 @@ RunService.Heartbeat:Connect(function()
 		local root = boss:FindFirstChild("HumanoidRootPart")
 
 		if root and hum and hum.Health > 0 then
-
-			-- hitbox
 			root.Size = Vector3.new(HITBOX,HITBOX,HITBOX)
 			root.CanCollide = false
 
-			-- bring boss
-			if BRING then
-				root.CFrame = hrp.CFrame * CFrame.new(0,0,-4)
+			if FARM then
 				hum.WalkSpeed = 0
 				hum.JumpPower = 0
-			end
 
-			-- auto farm follow (smooth)
-			if FARM then
-				local targetCF = root.CFrame * CFrame.new(0,0,4)
+				root.CFrame = hrp.CFrame * CFrame.new(0,0,-DIST)
+
+				local targetCF = root.CFrame * CFrame.new(0,0,DIST)
 				hrp.CFrame = hrp.CFrame:Lerp(targetCF,0.35)
 				hrp.CFrame = CFrame.lookAt(hrp.Position, root.Position)
 			end
