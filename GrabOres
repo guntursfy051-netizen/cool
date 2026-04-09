@@ -1,0 +1,161 @@
+--// SETTINGS
+local DELAY = 0.2
+local BASE_POS = CFrame.new(-355, 6399, -848)
+
+local TARGETS = {
+    -- Divine
+    ["Celestite"] = true,
+    ["Ruby Chest"] = true,
+
+    -- Secret
+    ["Nightrite"] = true,
+    ["Frostite"] = true,
+    ["Voidite"] = true,
+    ["Mega Chest"] = true,
+
+    -- Mythic
+    ["Cloverite"] = true,
+    ["Poopite"] = true,
+    ["Goldrite"] = true,
+    ["Prismite"] = true,
+    ["Crystal Chest"] = true,
+
+    -- NEW ORES
+    ["Tourmaline"] = true,
+    ["Crystal"] = true,
+    ["Bloodstone"] = true,
+    ["Emerald"] = true,
+    ["Goldstone"] = true,
+}
+
+--// SERVICES
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+--// CHARACTER
+local function getHRP()
+    local char = player.Character or player.CharacterAdded:Wait()
+    return char:WaitForChild("HumanoidRootPart")
+end
+
+--// PROMPT
+local function getPrompt(obj)
+    for _, v in ipairs(obj:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            return v
+        end
+    end
+end
+
+--// POSITION
+local function getPosition(obj)
+    if obj:IsA("Model") then
+        if obj.PrimaryPart then
+            return obj.PrimaryPart.CFrame
+        else
+            local part = obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                return part.CFrame
+            end
+        end
+    elseif obj:IsA("BasePart") then
+        return obj.CFrame
+    end
+end
+
+--// COLLECT + TP BACK
+local function collect(obj)
+    local hrp = getHRP()
+    local cf = getPosition(obj)
+    if not cf then return end
+
+    hrp.CFrame = cf + Vector3.new(0, 3, 0)
+    task.wait(0.1)
+
+    local prompt = getPrompt(obj)
+    if prompt then
+        fireproximityprompt(prompt)
+    end
+
+    task.wait(0.15)
+    hrp.CFrame = BASE_POS
+end
+
+--// GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 180, 0, 140)
+Frame.Position = UDim2.new(0.4, 0, 0.4, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.Text = "Ore Farm"
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Parent = Frame
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -20, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 30)
+ToggleBtn.Text = "Auto Collect: OFF"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+ToggleBtn.TextColor3 = Color3.new(1,1,1)
+ToggleBtn.Parent = Frame
+
+local TPBtn = Instance.new("TextButton")
+TPBtn.Size = UDim2.new(1, -20, 0, 30)
+TPBtn.Position = UDim2.new(0, 10, 0, 80)
+TPBtn.Text = "TP Base"
+TPBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+TPBtn.TextColor3 = Color3.new(1,1,1)
+TPBtn.Parent = Frame
+
+--// TOGGLE
+local enabled = false
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    ToggleBtn.Text = "Auto Collect: " .. (enabled and "ON" or "OFF")
+end)
+
+TPBtn.MouseButton1Click:Connect(function()
+    getHRP().CFrame = BASE_POS
+end)
+
+--// HIDE KEY (K)
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.K then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+    end
+end)
+
+--// LOOP
+task.spawn(function()
+    while true do
+        if enabled then
+            local ores = workspace:FindFirstChild("Ores")
+            if ores then
+                for _, obj in ipairs(ores:GetDescendants()) do
+                    if TARGETS[obj.Name] then
+                        local success = pcall(function()
+                            collect(obj)
+                        end)
+
+                        if success then
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(DELAY)
+    end
+end)
